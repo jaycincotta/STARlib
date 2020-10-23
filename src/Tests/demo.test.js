@@ -1,4 +1,9 @@
 import { ElectionResultsFromText } from "../STAR";
+import { Winners } from "./testHelpers";
+
+test("2+2", () => {
+  expect(2 + 2).toEqual(4);
+});
 
 test("STAR View Sample", () => {
   const csv = `A,B,C,D,E
@@ -29,10 +34,3 @@ test("Mike's Tie for 3rd", () => {
   const { multi } = ElectionResultsFromText(csv);
   expect(Winners(multi)).toEqual(expected);
 });
-
-function Winners(sut, expectedWinners) {
-  var winners = sut.sections.map((section) =>
-    section.candidates.map((index) => sut.candidates[index].name)
-  );
-  return winners;
-}
