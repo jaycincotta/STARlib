@@ -1,5 +1,11 @@
-import { ElectionResultsFromText } from "../STAR";
 import { Winners } from "./testHelpers";
+import StarParse from "../StarParse";
+import StarResults from "../StarResults";
+
+function ElectionResultsFromText(csv) {
+  const { candidates, votes } = StarParse(csv);
+  return StarResults(candidates, votes);
+}
 
 test("2+2", () => {
   expect(2 + 2).toEqual(4);

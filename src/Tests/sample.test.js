@@ -1,5 +1,11 @@
-import { ElectionResultsFromText } from "../STAR";
 import { Winners } from "./testHelpers";
+import StarParse from "../StarParse";
+import StarResults from "../StarResults";
+
+function ElectionResultsFromText(csv) {
+  const { candidates, votes } = StarParse(csv);
+  return StarResults(candidates, votes);
+}
 
 const csv = `Adam,Becky,Cindy,Dylan,Eliza
 0,0,5,3,3
