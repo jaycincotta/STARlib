@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { ElectionResultsFromText } from "./STAR";
+import StarParse from "./StarParse";
+import StarResults from "./StarResults";
 import Results from "./Results";
 import "./styles.css";
 
@@ -41,7 +42,13 @@ export default function App() {
         onBlur={(e) => setCsv(e.target.value)}
         defaultValue={defaultCSV}
       />
-      <button onClick={() => setResults(ElectionResultsFromText(csv))}>
+      <button
+        onClick={() => {
+          const { candidates, votes } = StarParse(csv);
+          const cvr = StarResults(candidates, votes);
+          setResults(cvr);
+        }}
+      >
         Process STAR Election
       </button>
       {!!results && <Results data={results} />}
