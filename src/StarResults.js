@@ -1,28 +1,5 @@
-import Papa from "papaparse";
 const minScore = 0;
 const maxScore = 5;
-
-// Parse a CSV string representing a CVR for a STAR election
-function parseText(csv) {
-  // Start with vanilla CSV parsing and throw errors, if invalid
-  var result = Papa.parse(csv, {
-    dynamicTyping: true,
-    header: false,
-    skipEmptyLines: true,
-    comments: "//"
-  });
-  if (result.errors.length > 0) {
-    alert(JSON.stringify(result));
-    return null;
-  }
-
-  // First row of CSV is header, remaining rows are data
-  const header = result.data[0];
-  const data = result.data
-    .slice(1)
-    .filter((row) => row.some((col) => col !== null));
-  return { candidates: header, votes: data };
-}
 
 function parseData(header, data) {
   // Inspect the data to determine the type of data in each column
@@ -515,16 +492,9 @@ function position(number) {
 
 /***************************** Public API *****************************/
 
-function ElectionResultsFromText(csv) {
-  const { candidates, votes } = parseText(csv);
-  return ElectionResultsFromData(candidates, votes);
-}
-
-function ElectionResultsFromData(candidates, votes) {
+export default function StarResults(candidates, votes) {
   const cvr = parseData(candidates, votes);
   const single = flattenSingle(cvr);
   const multi = flattenMulti(cvr);
   return { cvr: cvr, single: single, multi: multi };
 }
-
-export { ElectionResultsFromText, ElectionResultsFromData };
