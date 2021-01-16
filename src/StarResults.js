@@ -90,6 +90,10 @@ function parseData(header, data) {
   const candidateOrder = sortCandidates(candidates, matrix);
   const singleResults = splitCandidates(candidateOrder, candidates, matrix);
   const multiResults = splitMulti(singleResults, candidates, matrix);
+  // The splitProportional method alters the candidate array it is passed
+  // so let's pass it a copy of the array
+  const propResults = splitProportional([...candidates], scores, 3);
+
   return {
     header,
     data,
@@ -101,7 +105,8 @@ function parseData(header, data) {
     matrix,
     candidateOrder,
     singleResults,
-    multiResults
+    multiResults,
+    propResults
   };
 }
 
@@ -395,6 +400,194 @@ function getTransforms(header, data) {
   return transforms;
 }
 
+export function splitProportional(candidates, scores, nWinners) {
+  // Handle degenerate edge cases
+  if (!candidates || candidates.length === 0) {
+    return { winners: [], losers: [], others: [] };
+  }
+
+  if (candidates.length === 1) {
+    return { winners: candidates, losers: [], others: [] };
+  }
+
+  // Normalize scores array
+  var scoresNorm = normalizeArray(scores, maxScore);
+
+  // Find number of voters and quota size
+  const V = scoresNorm[0].length;
+  const quota = V / nWinners;
+
+  var ballot_weights = Array(V).fill(1);
+  // Initialize output arrays
+  var winners = [];
+  var losers = [];
+  var others = [];
+  var debuginfo = { splitPoints: [], spentAboves: [], weight_on_splits: [] };
+
+  // run loop until specified number of winners are found
+  while (winners.length < nWinners) {
+    // weight the scores
+    var weighted_scores = Array(scoresNorm.length);
+    var weighted_sums = Array(scoresNorm.length);
+    scoresNorm.forEach((row, r) => {
+      weighted_scores[r] = [];
+      row.forEach((score, s) => {
+        weighted_scores[r][s] = score * ballot_weights[s];
+      });
+      // sum scores for each candidate
+      weighted_sums[r] = sumArray(weighted_scores[r]);
+    });
+
+    // get index of winner
+    var w = indexOfMax(weighted_sums);
+
+    // add winner to winner list, remove from ballots
+    winners.push(candidates[w]);
+    scoresNorm.splice(w, 1);
+    candidates.splice(w, 1);
+
+    // create arrays for sorting ballots
+    var cand_df = [];
+    var cand_df_sorted = [];
+
+    weighted_scores[w].forEach((weighted_score, i) => {
+      cand_df.push({
+        index: i,
+        ballot_weight: ballot_weights[i],
+        weighted_score: weighted_score
+      });
+      cand_df_sorted.push({
+        index: i,
+        ballot_weight: ballot_weights[i],
+        weighted_score: weighted_score
+      });
+    });
+    cand_df_sorted.sort((a, b) =>
+      a.weighted_score < b.weighted_score ? 1 : -1
+    );
+
+    var split_point = findSplitPoint(cand_df_sorted, quota);
+
+    debuginfo.splitPoints.push(split_point);
+
+    var spent_above = 0;
+    cand_df.forEach((c, i) => {
+      if (c.weighted_score > split_point) {
+        spent_above += c.ballot_weight;
+      }
+    });
+    debuginfo.spentAboves.push(spent_above);
+
+    if (spent_above > 0) {
+      cand_df.forEach((c, i) => {
+        if (c.weighted_score > split_point) {
+          cand_df[i].ballot_weight = 0;
+        }
+      });
+    }
+
+    var weight_on_split = findWeightOnSplit(cand_df, split_point);
+
+    debuginfo.weight_on_splits.push(weight_on_split);
+    ballot_weights = updateBallotWeights(
+      cand_df,
+      ballot_weights,
+      weight_on_split,
+      quota,
+      spent_above,
+      split_point
+    );
+  }
+  losers = candidates;
+  return { winners, losers, others, debuginfo };
+}
+
+function updateBallotWeights(
+  cand_df,
+  ballot_weights,
+  weight_on_split,
+  quota,
+  spent_above,
+  split_point
+) {
+  if (weight_on_split > 0) {
+    var spent_value = (quota - spent_above) / weight_on_split;
+    cand_df.forEach((c, i) => {
+      if (c.weighted_score === split_point) {
+        cand_df[i].ballot_weight = cand_df[i].ballot_weight * (1 - spent_value);
+      }
+    });
+  }
+  cand_df.forEach((c, i) => {
+    if (c.ballot_weight > 1) {
+      ballot_weights[i] = 1;
+    } else if (c.ballot_weight < 0) {
+      ballot_weights[i] = 0;
+    } else {
+      ballot_weights[i] = c.ballot_weight;
+    }
+  });
+
+  return ballot_weights;
+}
+
+function findWeightOnSplit(cand_df, split_point) {
+  var weight_on_split = 0;
+  cand_df.forEach((c, i) => {
+    if (c.weighted_score === split_point) {
+      weight_on_split += c.ballot_weight;
+    }
+  });
+  return weight_on_split;
+}
+
+function indexOfMax(arr) {
+  if (arr.length === 0) {
+    return -1;
+  }
+
+  var max = arr[0];
+  var maxIndex = 0;
+
+  for (var i = 1; i < arr.length; i++) {
+    if (arr[i] > max) {
+      maxIndex = i;
+      max = arr[i];
+    }
+  }
+
+  return maxIndex;
+}
+
+function sumArray(arr) {
+  return arr.reduce((a, b) => a + b, 0);
+}
+
+function normalizeArray(scores, maxScore) {
+  // Normalize scores array
+  var scoresNorm = Array(scores.length);
+  scores.forEach((row, r) => {
+    scoresNorm[r] = [];
+    row.forEach((score, s) => {
+      scoresNorm[r][s] = score / maxScore;
+    });
+  });
+  return scoresNorm;
+}
+
+function findSplitPoint(cand_df_sorted, quota) {
+  var under_quota = [];
+  var under_quota_scores = [];
+  var cumsum = 0;
+  cand_df_sorted.forEach((c, i) => {
+    cumsum += c.ballot_weight;
+    if (cumsum < quota) {
+      under_quota.push(c);
+      under_quota_scores.push(c.weighted_score);
+    }
+  });
+  return Math.min(...under_quota_scores);
+}
 /******************************** Flatten Methods ******************************/
 
 function flatten(cvr, sections) {
@@ -496,5 +689,5 @@ export default function StarResults(candidates, votes) {
   const cvr = parseData(candidates, votes);
   const single = flattenSingle(cvr);
   const multi = flattenMulti(cvr);
-  return { cvr: cvr, single: single, multi: multi };
+  return { cvr: cvr, single: single, multi: multi, prop: cvr.propResults };
 }
